@@ -14,7 +14,7 @@ app = Flask(__name__, static_folder="static")
 
 class DBWrapper:
     def __init__(self):
-        # Pobieranie danych do bazy Turso bezpośrednio z serwera
+        # Pobieranie danych do bazy Turso z serwera
         db_url = os.environ.get("TURSO_DATABASE_URL")
         db_token = os.environ.get("TURSO_AUTH_TOKEN")
         if db_url and db_token:

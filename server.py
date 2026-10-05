@@ -93,35 +93,36 @@ def migrate():
         
         cols = [r[1] for r in c.execute("PRAGMA table_info(przepisy)").fetchall()]
 
-for n, t in (("sloty", "TEXT DEFAULT ''"), ("img_ok", "INTEGER DEFAULT 0")):
-    if n not in cols:
-        c.execute(f"ALTER TABLE przepisy ADD COLUMN {n} {t}")
+        for n, t in (("sloty", "TEXT DEFAULT ''"), ("img_ok", "INTEGER DEFAULT 0")):
+            if n not in cols:
+                c.execute(f"ALTER TABLE przepisy ADD COLUMN {n} {t}")
 
-for r in c.execute("SELECT id, tytul, sloty FROM przepisy").fetchall():
-    t, nr = clean_title(r["tytul"])
-    if t != r["tytul"]:
-        c.execute("UPDATE przepisy SET tytul=?, sloty=? WHERE id=?", (t, add_slot(r["sloty"], slots_of(r["tytul"])), r["id"]))
+        for r in c.execute("SELECT id, tytul, sloty FROM przepisy").fetchall():
+            t, nr = clean_title(r["tytul"])
+            if t != r["tytul"]:
+                c.execute("UPDATE przepisy SET tytul=?, sloty=? WHERE id=?", (t, add_slot(r["sloty"], slots_of(r["tytul"])), r["id"]))
 
-keep, sl = {}, {}
-for r in c.execute("SELECT id, tytul, sloty FROM przepisy ORDER BY id").fetchall():
-    k = norm(r["tytul"])
-    if k in keep:
-        u = {x for x in ((sl[k] or "") + "," + (r["sloty"] or "")).split(",") if x}
-        sl[k] = "," + ",".join(sorted(u)) + "," if u else ""
-        c.execute("UPDATE przepisy SET sloty=? WHERE id=?", (sl[k], keep[k]))
-        for tb in ("planer", "dziennik", "dzien_plan"):
-            try:
-                c.execute(f"UPDATE {tb} SET przepis_id=? WHERE przepis_id=?", (keep[k], r["id"]))
-            except:
-                pass
-        c.execute("DELETE FROM przepisy WHERE id=?", (r["id"],))
-    else:
-        keep[k], sl[k] = r["id"], r["sloty"]
+        keep, sl = {}, {}
+        for r in c.execute("SELECT id, tytul, sloty FROM przepisy ORDER BY id").fetchall():
+            k = norm(r["tytul"])
+            if k in keep:
+                u = {x for x in ((sl[k] or "") + "," + (r["sloty"] or "")).split(",") if x}
+                sl[k] = "," + ",".join(sorted(u)) + "," if u else ""
+                c.execute("UPDATE przepisy SET sloty=? WHERE id=?", (sl[k], keep[k]))
+                for tb in ("planer", "dziennik", "dzien_plan"):
+                    try:
+                        c.execute(f"UPDATE {tb} SET przepis_id=? WHERE przepis_id=?", (keep[k], r["id"]))
+                    except:
+                        pass
+                c.execute("DELETE FROM przepisy WHERE id=?", (r["id"],))
+            else:
+                keep[k], sl[k] = r["id"], r["sloty"]
 
-for r in c.execute("SELECT id, image_url FROM przepisy WHERE img_ok=0 AND image_url!=''").fetchall():
-    n = pack_img(r["image_url"])
-    if n:
-        c.execute("UPDATE przepisy SET image_url=?, img_ok=1 WHERE id=?", (n, r["id"]))
+        for r in c.execute("SELECT id, image_url FROM przepisy WHERE img_ok=0 AND image_url!=''").fetchall():
+            n = pack_img(r["image_url"])
+            if n:
+                c.execute("UPDATE przepisy SET image_url=?, img_ok=1 WHERE id=?", (n, r["id"]))
+
 migrate()
 
 def seed(c, d):

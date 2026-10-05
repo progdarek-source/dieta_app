@@ -19,10 +19,10 @@ class DBWrapper:
         db_token = os.environ.get("TURSO_AUTH_TOKEN")
         if db_url and db_token:
             import libsql_experimental as libsql
-            self.conn = libsql.connect(db_url, auth_token=db_token)
+            self.conn = libsql.connect(database=db_url, auth_token=db_token)
         else:
             self.conn = sqlite3.connect(DB)
-        self.conn.row_factory = sqlite3.Row
+            self.conn.row_factory = sqlite3.Row
 
     def __enter__(self):
         return self.conn

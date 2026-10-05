@@ -1,0 +1,25 @@
+# Pamięć podręczna Pythona (pliki tymczasowe)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Środowisko wirtualne
+.venv/
+venv/
+env/
+
+# Bezpieczeństwo i pliki konfiguracyjne (klucze, tokeny Turso)
+.env
+.streamlit/secrets.toml
+
+# Lokalne bazy danych (nie wysyłaj ich, jeśli używasz Turso)
+*.db
+przepisy.db
+
+# Pliki systemowe i tymczasowe
+.DS_Store
+Thumbs.db
+
+# Foldery ze zdjęciami / tymczasowe (opcjonalnie)
+extracted_images/

@@ -125,6 +125,32 @@ def migrate():
 
 migrate()
 
+def sync_local_to_turso():
+    """Automatycznie przenosi dane z pliku przepisy.db do chmury Turso podczas startu na Renderze."""
+    if not os.path.exists("przepisy.db") or "TURSO_DATABASE_URL" not in os.environ:
+        return
+    try:
+        local_conn = sqlite3.connect("przepisy.db")
+        with db() as turso:
+            # Jeśli w Turso są już przepisy, pomijamy
+            count = turso.execute("SELECT COUNT(*) FROM przepisy").fetchone()
+            if count and count[0] > 0:
+                return
+            
+            tables = [r[0] for r in local_conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchall()]
+            for table in tables:
+                cols = [c[1] for c in local_conn.execute(f"PRAGMA table_info({table})").fetchall()]
+                placeholders = ", ".join(["?"] * len(cols))
+                col_names = ", ".join(cols)
+                rows = local_conn.execute(f"SELECT * FROM {table}").fetchall()
+                for row in rows:
+                    turso.execute(f"INSERT OR IGNORE INTO {table} ({col_names}) VALUES ({placeholders})", row)
+            print("✅ Pomyślnie zmigrowano dane z przepisy.db do Turso!")
+    except Exception as e:
+        print(f"Błąd auto-migracji: {e}")
+
+sync_local_to_turso()
+
 def seed(c, d):
     try:
         if c.execute("SELECT 1 FROM dzien_plan WHERE data=?", (d,)).fetchone(): return

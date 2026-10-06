@@ -90,38 +90,40 @@ def migrate():
         c.execute("CREATE TABLE IF NOT EXISTS zakupy(id INTEGER PRIMARY KEY AUTOINCREMENT, tekst TEXT, kupione INTEGER DEFAULT 0)")
         c.execute("CREATE TABLE IF NOT EXISTS korekta(data TEXT PRIMARY KEY, kcal INTEGER)")
         c.execute("CREATE TABLE IF NOT EXISTS ustawienia(klucz TEXT PRIMARY KEY, wartosc TEXT)")
-        
+
         cols = [r[1] for r in c.execute("PRAGMA table_info(przepisy)").fetchall()]
 
         for n, t in (("sloty", "TEXT DEFAULT ''"), ("img_ok", "INTEGER DEFAULT 0")):
             if n not in cols:
                 c.execute(f"ALTER TABLE przepisy ADD COLUMN {n} {t}")
 
+        # r[0] = id, r[1] = tytul, r[2] = sloty
         for r in c.execute("SELECT id, tytul, sloty FROM przepisy").fetchall():
-            t, nr = clean_title(r["tytul"])
-            if t != r["tytul"]:
-                c.execute("UPDATE przepisy SET tytul=?, sloty=? WHERE id=?", (t, add_slot(r["sloty"], slots_of(r["tytul"])), r["id"]))
+            t, nr = clean_title(r[1])
+            if t != r[1]:
+                c.execute("UPDATE przepisy SET tytul=?, sloty=? WHERE id=?", (t, add_slot(r[2], slots_of(r[1])), r[0]))
 
         keep, sl = {}, {}
         for r in c.execute("SELECT id, tytul, sloty FROM przepisy ORDER BY id").fetchall():
-            k = norm(r["tytul"])
+            k = norm(r[1])
             if k in keep:
-                u = {x for x in ((sl[k] or "") + "," + (r["sloty"] or "")).split(",") if x}
+                u = {x for x in ((sl[k] or "") + "," + (r[2] or "")).split(",") if x}
                 sl[k] = "," + ",".join(sorted(u)) + "," if u else ""
                 c.execute("UPDATE przepisy SET sloty=? WHERE id=?", (sl[k], keep[k]))
                 for tb in ("planer", "dziennik", "dzien_plan"):
                     try:
-                        c.execute(f"UPDATE {tb} SET przepis_id=? WHERE przepis_id=?", (keep[k], r["id"]))
+                        c.execute(f"UPDATE {tb} SET przepis_id=? WHERE przepis_id=?", (keep[k], r[0]))
                     except:
                         pass
-                c.execute("DELETE FROM przepisy WHERE id=?", (r["id"],))
+                c.execute("DELETE FROM przepisy WHERE id=?", (r[0],))
             else:
-                keep[k], sl[k] = r["id"], r["sloty"]
+                keep[k], sl[k] = r[0], r[2]
 
+        # r[0] = id, r[1] = image_url
         for r in c.execute("SELECT id, image_url FROM przepisy WHERE img_ok=0 AND image_url!=''").fetchall():
-            n = pack_img(r["image_url"])
+            n = pack_img(r[1])
             if n:
-                c.execute("UPDATE przepisy SET image_url=?, img_ok=1 WHERE id=?", (n, r["id"]))
+                c.execute("UPDATE przepisy SET image_url=?, img_ok=1 WHERE id=?", (n, r[0]))
 
 migrate()
 

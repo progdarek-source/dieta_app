@@ -101,7 +101,7 @@ def migrate():
         for r in c.execute("SELECT id, tytul, sloty FROM przepisy").fetchall():
             t, nr = clean_title(r[1])
             if t != r[1]:
-                c.execute("UPDATE przepisy SET tytul=?, sloty=? WHERE id=?", (t, add_slot(r[2], slots_of(r[1])), r[0]))
+                c.execute("UPDATE przepisy SET tytul=?, sloty=? WHERE id=?", (t, add_slot(r[2], slots_of(r[1], nr)), r[0]))
 
         keep, sl = {}, {}
         for r in c.execute("SELECT id, tytul, sloty FROM przepisy ORDER BY id").fetchall():

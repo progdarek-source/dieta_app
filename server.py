@@ -42,21 +42,40 @@ def db():
 def norm(t): return re.sub(r"\s+", " ", (t or "").strip().lower())
 
 def pack_img(u):
-    """Usuwa czarne tło (brak maski w PDF) i zapisuje lekki WebP z przezroczystością."""
+    """Zmniejsza rozdzielczość obrazu przed obróbką, zapobiegając przekroczeniu limitu RAM na Renderze."""
     try:
-        import io
+        import io, gc
         from PIL import Image, ImageDraw, ImageChops, ImageFilter
-        im = Image.open(io.BytesIO(base64.b64decode(re.match(r"data:image/\w+;base64,(.*)", u, re.S).group(1))))
+        
+        img_bytes = base64.b64decode(re.match(r"data:image/\w+;base64,(.*)", u, re.S).group(1))
+        im = Image.open(io.BytesIO(img_bytes))
+        
+        # Ograniczenie rozmiaru w pamięci RAM do maks. 600x600 px
+        im.thumbnail((600, 600), Image.Resampling.LANCZOS)
+        
         if im.mode == "RGBA" and im.getextrema()[3][0] < 255:
             out = im
         else:
-            im = im.convert("RGB"); w, h = im.size
+            im = im.convert("RGB")
+            w, h = im.size
             for pt in [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]:
                 ImageDraw.floodfill(im, pt, (255, 0, 255), thresh=40)
             r, g, b = im.split()
-            bg = ImageChops.multiply(ImageChops.multiply(r.point(lambda v: 255 * (v == 255)), g.point(lambda v: 255 * (v == 0))), b.point(lambda v: 255 * (v == 255)))
-            out = im.convert("RGBA"); out.putalpha(ImageChops.invert(bg.filter(ImageFilter.MaxFilter(5))))
-        buf = io.BytesIO(); out.save(buf, "WEBP", quality=85)
+            bg = ImageChops.multiply(
+                ImageChops.multiply(r.point(lambda v: 255 * (v == 255)), g.point(lambda v: 255 * (v == 0))),
+                b.point(lambda v: 255 * (v == 255))
+            )
+            out = im.convert("RGBA")
+            out.putalpha(ImageChops.invert(bg.filter(ImageFilter.MaxFilter(3))))
+        
+        buf = io.BytesIO()
+        out.save(buf, "WEBP", quality=75, optimize=True)
+        
+        im.close()
+        if out != im:
+            out.close()
+        gc.collect()
+        
         return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode()
     except Exception:
         return None

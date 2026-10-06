@@ -64,7 +64,7 @@ def extract_meals_and_images_from_pdf(pdf_file):
             image_bytes = base_image["image"]
             image_url = compress_image_bytes(image_bytes)
 
-        # Tutaj następuje dalsza logika parsowania treści posiłku z `text`
+        # Tutaj następuje dalsza logika parsuwania treści posiłku z `text`
         # ... (zachowaj dotychczasową logikę wyciągania tytułu, składników i kcal)
 
         # Wymuszenie czyszczenia pamięci po każdej stronie PDF

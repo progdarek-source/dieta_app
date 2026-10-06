@@ -42,44 +42,38 @@ def db():
 def norm(t): return re.sub(r"\s+", " ", (t or "").strip().lower())
 
 def pack_img(u):
-    """Zmniejsza rozdzielczość obrazu przed obróbką, zapobiegając przekroczeniu limitu RAM na Renderze."""
+    """Szybkie przeskalowanie i kompresja zdjęcia do WEBP bez obciążania CPU i RAM."""
+    if not u:
+        return None
     try:
         import io, gc
-        from PIL import Image, ImageDraw, ImageChops, ImageFilter
-        
-        img_bytes = base64.b64decode(re.match(r"data:image/\w+;base64,(.*)", u, re.S).group(1))
+        from PIL import Image
+
+        match = re.match(r"data:image/\w+;base64,(.*)", u, re.S)
+        if not match:
+            return u
+            
+        img_bytes = base64.b64decode(match.group(1))
         im = Image.open(io.BytesIO(img_bytes))
-        
-        # Ograniczenie rozmiaru w pamięci RAM do maks. 600x600 px
-        im.thumbnail((600, 600), Image.Resampling.LANCZOS)
-        
-        if im.mode == "RGBA" and im.getextrema()[3][0] < 255:
-            out = im
-        else:
-            im = im.convert("RGB")
-            w, h = im.size
-            for pt in [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]:
-                ImageDraw.floodfill(im, pt, (255, 0, 255), thresh=40)
-            r, g, b = im.split()
-            bg = ImageChops.multiply(
-                ImageChops.multiply(r.point(lambda v: 255 * (v == 255)), g.point(lambda v: 255 * (v == 0))),
-                b.point(lambda v: 255 * (v == 255))
-            )
-            out = im.convert("RGBA")
-            out.putalpha(ImageChops.invert(bg.filter(ImageFilter.MaxFilter(3))))
+
+        # Natychmiastowe zmniejszenie do max 450x450 px
+        im.thumbnail((450, 450), Image.Resampling.LANCZOS)
         
         buf = io.BytesIO()
-        out.save(buf, "WEBP", quality=75, optimize=True)
-        
+        if im.mode in ("RGBA", "P"):
+            im = im.convert("RGBA")
+            im.save(buf, "WEBP", quality=75)
+        else:
+            im = im.convert("RGB")
+            im.save(buf, "WEBP", quality=75, optimize=True)
+
         im.close()
-        if out != im:
-            out.close()
         gc.collect()
-        
+
         return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode()
     except Exception:
         return None
-
+    
 def add_slot(old, nr):
     parts = {x for x in (old or "").split(",") if x}
     for n in ([nr] if isinstance(nr, int) else nr):

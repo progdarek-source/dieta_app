@@ -59,7 +59,15 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .si{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--ln)}.si span{flex:1}.si.bought span{text-decoration:line-through;color:var(--mu)}.ck{width:26px;height:26px;border:1.8px solid var(--g);border-radius:50%;display:grid;place-items:center;color:#fff;flex:none}.bought .ck{background:var(--g)}.ck svg{width:16px;height:16px}.xx{color:var(--mu)}
 .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--tx);color:#fff;padding:10px 18px;border-radius:20px;z-index:50}
 </style></head><body>
-<div id="app"></div>
+<div id="app">
+  <div style="text-align: center; padding: 40px 20px;">
+    <h2>Witaj w aplikacji!</h2>
+    <p style="color: #666; margin: 15px 0;">Baza danych jest pusta. Wgraj plik PDF z dietą, aby rozpocząć.</p>
+    <button onclick="$('#pdf').click()" style="background: #2f6b4f; color: white; border: none; padding: 14px 24px; border-radius: 20px; font-weight: bold; font-size: 16px; cursor: pointer;">
+      📥 Wgraj plik PDF z dietą
+    </button>
+  </div>
+</div>
 <div class="sheet" id="rec"></div><div class="sheet" id="shop"></div><div class="sheet" id="pick"></div>
 <input type="file" id="pdf" accept="application/pdf" hidden><input type="date" id="dp" style="position:fixed;opacity:0;pointer-events:none;top:0">
 <nav class="nav"><button id="n1" onclick="go('dz')"><svg viewBox="0 0 24 24"><path d="M5 4h12a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2zM9 4v8l2-1.5 2 1.5V4"/></svg>Dziennik</button>
@@ -92,22 +100,38 @@ return`<div class="${m.stan=='pominiety'?'skip':''}"><div class="card meal" oncl
 ${mode=='plan'?(S.edit?`<button class="pen" onclick="event.stopPropagation();openPick(${m.id})">${I.pen}</button>${tr}`:''):`${tr}<div class="acts" onclick="event.stopPropagation()"><button onclick="openPick(${m.id})">${I.sw}Zamień</button><button onclick="setStan(${m.id},'${m.stan=='pominiety'?'plan':'pominiety'}')">${I.x}Pomiń</button><button class="${done?'done':''}" onclick="setStan(${m.id},'${done?'plan':'zjedzony'}')">${I.chk}Zjedzony</button></div>`}</div></div>`};
 async function render(){
  $('#n1').className=S.view=='dz'?'on':'';$('#n2').className=S.view=='pl'?'on':'';
- const [wk,d]=await Promise.all([weekbar(),J('/api/day/'+S.date)]),dt=D(S.date),g=d.goal,e=d.eaten,today=S.date==iso(new Date());
- const title=today?'Dzisiaj':`${dt.getDate()} ${MIES[dt.getMonth()]} ${dt.getFullYear()}`;
- const dp=`onclick="$('#dp').value=S.date;$('#dp').showPicker?.()"`;
- if(S.view=='dz'){$('#app').innerHTML=`<div class="hd"><h1 ${dp} style="cursor:pointer">${title} ${I.car}</h1><div class="prof r">${I.x.replace(/<path.*\/>/,'<circle cx="12" cy="9" r="4"/><path d="M5 20c1-4 4-5 7-5s6 1 7 5"/>')}</div></div>${wk}
- <div class="car" onscroll="dots(this)"><div class="card sum c2"><div><b>Spożyte kcal</b>${arc(e.kcal/g.kcal,'var(--g)',1)}<div class="big" style="margin-top:-30px;cursor:pointer" onclick="editKcal(${e.kcal})">${e.kcal}<span style="font-size:13px;color:var(--mu)"> ✎</span></div><small style="cursor:pointer" onclick="editGoal(${g.kcal})">z ${g.kcal} ✎</small></div><div><b>Spalone kcal</b>${arc(0,'#e5372b',1)}<div class="big" style="margin-top:-30px">0</div><small>z 2100</small></div></div>
- <div class="card sum c3">${[['Białko',e.b,g.b,'#2f55d4'],['Tłuszcze',e.t,g.t,'#f0c419'],['Węglowodany',e.w,g.w,'#ef9a3c']].map(x=>`<div><b>${x[0]}</b><div style="margin:8px 0">${arc(x[1]/x[2],x[3])}</div><div class="big" style="font-size:20px">${x[1]} g</div><small>z ${x[2]}</small></div>`).join('')}</div></div>
- <div class="dots"><i class="on"></i><i></i></div><div class="sec"><h2>Posiłki</h2>${sections(d.meals,'dz')}
- <button class="wide" onclick="openPick(null,0)"><span>Dodaj posiłek (dowolny)</span><span class="b">${I.plus}Dodaj</span></button></div>`}
- else{$('#app').innerHTML=`<div class="hd"><h1>Twoja dieta</h1><button class="r" ${dp}>${I.cal}</button></div>${wk}
- <div class="dayrow"><b class="ser" style="font-size:18px">${DN[(dt.getDay()+6)%7]} ${S.date.slice(8)}.${S.date.slice(5,7)}</b><button onclick="$('#pdf').click()" title="Importuj PDF" style="font-size:22px;letter-spacing:2px">···</button></div>
- <div class="sec">${sections(d.meals,'plan')}<div class="card" style="margin:12px 0">Zjedz: <b>${d.planned.kcal} kcal</b> · B: <b>${d.planned.b} g</b> · T: <b>${d.planned.t} g</b> · W: <b>${d.planned.w} g</b></div>
- <div class="card" style="margin-bottom:12px;color:#2f55d4">💧 <span style="color:var(--tx)">Wypij co najmniej 2.2 l wody</span></div>
- <button class="wide" style="margin-top:0" onclick="openShop()"><span>Lista zakupów${d.shop?` (${d.shop})`:''}</span><span class="b">${I.cart}</span></button>
- <button class="wide" onclick="$('#pdf').click()"><span>Importuj przepisy z PDF</span><span class="b">${I.plus}PDF</span></button></div>
- <button class="fab" onclick="S.edit=!S.edit;render()">${S.edit?'Zakończ edycję':'Edytuj dietę'}</button>`}}
-function dots(el){const i=Math.round(el.scrollLeft/el.clientWidth);document.querySelectorAll('.dots i').forEach((x,k)=>x.className=k==i?'on':'')}
+ try {
+   const [wk,d]=await Promise.all([weekbar(),J('/api/day/'+S.date)]),dt=D(S.date),g=d.goal,e=d.eaten,today=S.date==iso(new Date());
+   const title=today?'Dzisiaj':`${dt.getDate()} ${MIES[dt.getMonth()]} ${dt.getFullYear()}`;
+   const dp=`onclick="$('#dp').value=S.date;$('#dp').showPicker?.()"`;
+   if(S.view=='dz'){
+     $('#app').innerHTML=`<div class="hd"><h1 ${dp} style="cursor:pointer">${title} ${I.car}</h1><div class="prof r">${I.x.replace(/<path.*\/>/,'<circle cx="12" cy="9" r="4"/><path d="M5 20c1-4 4-5 7-5s6 1 7 5"/>')}</div></div>${wk}
+     <div class="car" onscroll="dots(this)"><div class="card sum c2"><div><b>Spożyte kcal</b>${arc(e.kcal/g.kcal,'var(--g)',1)}<div class="big" style="margin-top:-30px;cursor:pointer" onclick="editKcal(${e.kcal})">${e.kcal}<span style="font-size:13px;color:var(--mu)"> ✎</span></div><small style="cursor:pointer" onclick="editGoal(${g.kcal})">z ${g.kcal} ✎</small></div><div><b>Spalone kcal</b>${arc(0,'#e5372b',1)}<div class="big" style="margin-top:-30px">0</div><small>z 2100</small></div></div>
+     <div class="card sum c3">${[['Białko',e.b,g.b,'#2f55d4'],['Tłuszcze',e.t,g.t,'#f0c419'],['Węglowodany',e.w,g.w,'#ef9a3c']].map(x=>`<div><b>${x[0]}</b><div style="margin:8px 0">${arc(x[1]/x[2],x[3])}</div><div class="big" style="font-size:20px">${x[1]} g</div><small>z${x[2]}</small></div>`).join('')}</div></div>
+     <div class="dots"><i class="on"></i><i></i></div><div class="sec"><h2>Posiłki</h2>${sections(d.meals,'dz')}
+     <button class="wide" onclick="openPick(null,0)"><span>Dodaj posiłek (dowolny)</span><span class="b">${I.plus}Dodaj</span></button></div>`;
+   } else {
+     $('#app').innerHTML=`<div class="hd"><h1>Twoja dieta</h1><button class="r" ${dp}>${I.cal}</button></div>${wk}
+     <div class="dayrow"><b class="ser" style="font-size:18px">${DN[(dt.getDay()+6)%7]} ${S.date.slice(8)}.${S.date.slice(5,7)}</b><button onclick="$('#pdf').click()" title="Importuj PDF" style="font-size:22px;letter-spacing:2px">···</button></div>
+     <div class="sec">${sections(d.meals,'plan')}<div class="card" style="margin:12px 0">Zjedz: <b>${d.planned.kcal} kcal</b> · B: <b>${d.planned.b} g</b> · T: <b>${d.planned.t} g</b> · W: <b>${d.planned.w} g</b></div>
+     <div class="card" style="margin-bottom:12px;color:#2f55d4">💧 <span style="color:var(--tx)">Wypij co najmniej 2.2 l wody</span></div>
+     <button class="wide" style="margin-top:0" onclick="openShop()"><span>Lista zakupów${d.shop?` (${d.shop})`:''}</span><span class="b">${I.cart}</span></button>
+     <button class="wide" onclick="$('#pdf').click()"><span>Importuj przepisy z PDF</span><span class="b">${I.plus}PDF</span></button></div>
+     <button class="fab" onclick="S.edit=!S.edit;render()">${S.edit?'Zakończ edycję':'Edytuj dietę'}</button>`;
+   }
+} catch (err) {
+   console.error("Błąd ładowania danych:", err);
+   $('#app').innerHTML = `
+     <div style="text-align: center; padding: 40px 20px;">
+       <h2>Brak danych w bazie</h2>
+       <p style="color: #666; margin: 15px 0;">Wgraj plik PDF, aby zasilić bazę danymi.</p>
+       <button onclick="$('#pdf').click()" style="background: #2f6b4f; color: white; border: none; padding: 14px 24px; border-radius: 20px; font-weight: bold; font-size: 16px; cursor: pointer;">
+         📥 Wgraj plik PDF z dietą
+       </button>
+     </div>
+   `;
+ }
+}
 async function setStan(id,stan){await P('/api/meal/'+id,'PATCH',{stan});render()}
 $('#dp').onchange=e=>{if(e.target.value){S.date=e.target.value;render()}};
 // --- szczegóły przepisu ---

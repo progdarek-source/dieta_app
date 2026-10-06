@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 from flask import Flask, jsonify, request, Response, send_from_directory
 from pdf_parser import extract_meals_and_images_from_pdf, scale_ingredients_text
 import pdf_parser as _p
+import gc
 
 DB = "przepisy.db"
 SLOTS = {"Śniadanie": "6:00-9:00", "Drugie śniadanie": "9:00-11:00", "Lunch": "11:00-14:00",
@@ -371,6 +372,7 @@ def import_pdf():
                     VALUES(?,?,?,?,?,?,?,?,'pdf',?,?)""", (r["tytul"], r["skladniki"], r["przygotowanie"], r["kcal"], r["bialko"], r["wegle"], r["tluszcze"],
                     img or r["image_url"], add_slot("", nrs), 1 if img else 0))
                 ex[k] = dict(id=cur.lastrowid, sloty=add_slot("", nrs)); add += 1
+            gc.collect()
     return jsonify(added=add, updated=upd)
 
 if __name__ == "__main__":

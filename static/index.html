@@ -1,5 +1,9 @@
-<!doctype html><html lang="pl"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Dieta</title>
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Dieta</title>
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{--g:#2f6b4f;--gl:#e6f2ec;--bg:#f6f7f6;--ln:#e4e7e5;--tx:#1c211e;--mu:#7b847f;--r:18px}
@@ -29,7 +33,7 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .meal{display:grid;grid-template-columns:1fr 92px;gap:10px;align-items:center;margin-bottom:6px;position:relative}
 .meal h3{font:600 18px/1.2 Newsreader,serif;margin-bottom:6px}.meal p{color:var(--mu);font-size:13px}
 .meal img,.ph{width:92px;height:92px;border-radius:50%;object-fit:cover;background:var(--gl)}
-.pill{display:inline-block;background:var(--bg);border-radius:20px;padding:3px 10px;font-weight:600;font-size:13px;margin-top:6px}
+.pill{display:inline-block;background:var(--bg);border-radius:20px;font-weight:600;font-size:13px;margin-top:6px}
 .acts{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
 .acts button{border:1px solid var(--ln);border-radius:12px;padding:10px 4px;display:flex;gap:6px;justify-content:center;align-items:center;font-size:14px}
 .acts .done{background:var(--gl);border-color:var(--g);color:var(--g)}.skip{opacity:.5}
@@ -58,7 +62,9 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .rs li{display:flex;justify-content:space-between;align-items:center;gap:8px}.rs li button{color:var(--g);flex:none}
 .si{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--ln)}.si span{flex:1}.si.bought span{text-decoration:line-through;color:var(--mu)}.ck{width:26px;height:26px;border:1.8px solid var(--g);border-radius:50%;display:grid;place-items:center;color:#fff;flex:none}.bought .ck{background:var(--g)}.ck svg{width:16px;height:16px}.xx{color:var(--mu)}
 .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--tx);color:#fff;padding:10px 18px;border-radius:20px;z-index:50}
-</style></head><body>
+</style>
+</head>
+<body>
 <div id="app">
   <div style="text-align: center; padding: 40px 20px;">
     <h2>Witaj w aplikacji!</h2>
@@ -86,8 +92,16 @@ const MIES=['stycznia','lutego','marca','kwietnia','maja','czerwca','lipca','sie
 const SL=[['Śniadanie','6:00-9:00'],['Drugie śniadanie','9:00-11:00'],['Lunch','11:00-14:00'],['Obiad','14:00-17:00'],['Kolacja','18:00-21:00']];
 function sections(ms,mode){S.ms=ms;const row=(n,t,items,add)=>`<div class="t">${I.clk}<b>${n}</b><span>${t}</span>${add?`<button class="mini" onclick="openPick(null,${add})">${I.plus}Dodaj</button>`:''}</div>${items.map(m=>mealCard(m,mode)).join('')||'<div class="emp">Brak posiłku</div>'}`;
  let o=SL.map((x,i)=>row(`Posiłek ${i+1} · ${x[0]}`,x[1],ms.filter(m=>m.slot==x[0]),i+1)).join('');const ex=ms.filter(m=>!SL.some(x=>x[0]==m.slot));return o+(ex.length?row('Dodatkowe','',ex,0):'')}
-const D=s=>new Date(s+'T12:00'),J=(u,o)=>fetch(u,o).then(r=>r.json()),
- P=(u,m,b)=>J(u,{method:m,headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+const D=s=>new Date(s+'T12:00'),
+J=async(u,o)=>{
+  const r=await fetch(u,o);
+  if(!r.ok){
+    const txt=await r.text().catch(()=>'');
+    throw new Error(`Błąd HTTP ${r.status}: ${txt.slice(0,100)}`);
+  }
+  return r.json();
+},
+P=(u,m,b)=>J(u,{method:m,headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
 const toast=t=>{const e=document.createElement('div');e.className='toast';e.textContent=t;document.body.append(e);setTimeout(()=>e.remove(),2500)};
 function go(v){S.view=v;S.edit=false;render()}
 function arc(p,col,half){const r=40,c=Math.PI*r;return half?`<svg class="arc" viewBox="0 0 100 52"><path d="M10 50A40 40 0 0 1 90 50" stroke="#dfe8e3"/><path d="M10 50A40 40 0 0 1 90 50" stroke="${col}" stroke-dasharray="${c*Math.min(p,1)} ${c}"/></svg>`:
@@ -121,12 +135,13 @@ async function render(){
    }
 } catch (err) {
    console.error("Błąd ładowania danych:", err);
+   const is502 = String(err).includes('502');
    $('#app').innerHTML = `
      <div style="text-align: center; padding: 40px 20px;">
-       <h2>Brak danych w bazie</h2>
-       <p style="color: #666; margin: 15px 0;">Wgraj plik PDF, aby zasilić bazę danymi.</p>
-       <button onclick="$('#pdf').click()" style="background: #2f6b4f; color: white; border: none; padding: 14px 24px; border-radius: 20px; font-weight: bold; font-size: 16px; cursor: pointer;">
-         📥 Wgraj plik PDF z dietą
+       <h2>${is502 ? 'Błąd połączenia z serwerem (502)' : 'Brak danych w bazie'}</h2>
+       <p style="color: #666; margin: 15px 0;">${is502 ? 'Serwer (Render) wygenerował błąd 502 Bad Gateway. Sprawdź zakładkę Logs na Renderze.' : 'Wgraj plik PDF, aby zasilić bazę danymi.'}</p>
+       <button onclick="${is502 ? 'render()' : "$('#pdf').click()"}" style="background: #2f6b4f; color: white; border: none; padding: 14px 24px; border-radius: 20px; font-weight: bold; font-size: 16px; cursor: pointer;">
+         ${is502 ? '🔄 Odśwież połączenie' : '📥 Wgraj plik PDF z dietą'}
        </button>
      </div>
    `;
@@ -185,8 +200,20 @@ async function list(){const r=await J(`/api/recipes?q=${encodeURIComponent($('#q
  <button class="h" onclick="event.stopPropagation();tf(${x.id})">${f.includes(x.id)?I.heart:I.heart.replace('fill:#d33','fill:none')}</button></div>`).join('')||'<p class="sec">Brak wyników.</p>'}
 function tf(i){let f=fav();f=f.includes(i)?f.filter(x=>x!=i):[...f,i];localStorage.fav=JSON.stringify(f);list()}
 async function choose(rid){if(target)await P('/api/meal/'+target,'PATCH',{rid});else await P(`/api/day/${S.date}/meal`,'POST',{rid,slot:PS?SL[PS-1][0]:'Dodatkowy'});$('#pick').classList.remove('show');render()}
-// --- import PDF (backend używa tej samej funkcji co app.py) ---
-$('#pdf').onchange=async e=>{const f=new FormData();f.append('pdf',e.target.files[0]);toast('Przetwarzam PDF…');
- const r=await J('/api/import-pdf',{method:'POST',body:f});toast(r.error||`Nowych: ${r.added}, zaktualizowanych: ${r.updated}`);e.target.value=''};
+// --- import PDF ---
+$('#pdf').onchange=async e=>{
+  if(!e.target.files[0]) return;
+  const f=new FormData();f.append('pdf',e.target.files[0]);toast('Przetwarzam PDF…');
+  try {
+    const r=await J('/api/import-pdf',{method:'POST',body:f});
+    toast(r.error||`Nowych: ${r.added}, zaktualizowanych: ${r.updated}`);
+    render();
+  } catch(err) {
+    console.error(err);
+    toast('Błąd serwera (502) podczas wgrywania PDF');
+  } finally {
+    e.target.value='';
+  }
+};
 render();
 </script></body></html>

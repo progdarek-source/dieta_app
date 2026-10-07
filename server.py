@@ -13,29 +13,88 @@ DNI = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Ni
 GOAL = dict(kcal=1900, b=110, t=65, w=210)
 app = Flask(__name__, static_folder="static")
 
+class DictRow(dict):
+    """Obiekt wiersza obsługujący zarówno dostęp r['kolumna'] jak i r[0]."""
+    def __init__(self, cols, vals):
+        super().__init__(zip(cols, vals))
+        self._vals = tuple(vals)
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._vals[key]
+        return super().__getitem__(key)
+
+class DictCursor:
+    """Kursor dopasowujący wyniki Turso do składni SQLite."""
+    def __init__(self, cursor):
+        self.cursor = cursor
+
+    def execute(self, sql, params=()):
+        self.cursor.execute(sql, params)
+        return self
+
+    def fetchone(self):
+        row = self.cursor.fetchone()
+        if row is None:
+            return None
+        if isinstance(row, (dict, sqlite3.Row)):
+            return row
+        cols = [d[0] for d in self.cursor.description]
+        return DictRow(cols, row)
+
+    def fetchall(self):
+        rows = self.cursor.fetchall()
+        if not rows:
+            return []
+        if isinstance(rows[0], (dict, sqlite3.Row)):
+            return rows
+        cols = [d[0] for d in self.cursor.description]
+        return [DictRow(cols, r) for r in rows]
+
+    @property
+    def lastrowid(self):
+        return getattr(self.cursor, "lastrowid", None)
+
 class DBWrapper:
     def __init__(self):
-        # Pobieranie danych do bazy Turso z serwera
         db_url = os.environ.get("TURSO_DATABASE_URL")
         db_token = os.environ.get("TURSO_AUTH_TOKEN")
         if db_url and db_token:
             import libsql_experimental as libsql
             self.conn = libsql.connect(database=db_url, auth_token=db_token)
+            self.is_turso = True
         else:
             self.conn = sqlite3.connect(DB)
             self.conn.row_factory = sqlite3.Row
+            self.is_turso = False
+
+    def execute(self, sql, params=()):
+        cur = self.conn.cursor()
+        cur.execute(sql, params)
+        if self.is_turso:
+            return DictCursor(cur)
+        return cur
+
+    def commit(self):
+        self.conn.commit()
+
+    def rollback(self):
+        self.conn.rollback()
+
+    def close(self):
+        self.conn.close()
 
     def __enter__(self):
-        return self.conn
+        return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         try:
             if exc_type is None:
-                self.conn.commit()
+                self.commit()
             else:
-                self.conn.rollback()
+                self.rollback()
         finally:
-            self.conn.close()
+            self.close()
 
 def db():
     return DBWrapper()
@@ -43,7 +102,6 @@ def db():
 def norm(t): return re.sub(r"\s+", " ", (t or "").strip().lower())
 
 def pack_img(u):
-    """Szybkie przeskalowanie i kompresja zdjęcia do WEBP bez obciążania CPU i RAM."""
     if not u:
         return None
     try:
@@ -56,8 +114,6 @@ def pack_img(u):
             
         img_bytes = base64.b64decode(match.group(1))
         im = Image.open(io.BytesIO(img_bytes))
-
-        # Natychmiastowe zmniejszenie do max 450x450 px
         im.thumbnail((450, 450), Image.Resampling.LANCZOS)
         
         buf = io.BytesIO()
@@ -87,13 +143,10 @@ def clean_title(t):
     return ((PREF.sub("", t).strip() or t), int(m.group(1)) if m else 0)
 
 def slots_of(orig, nr):
-    """'Posiłek 5 / dowolna pora dnia ...' = danie na każdą porę dnia -> wszystkie 5 sekcji."""
     return [1, 2, 3, 4, 5] if "dowolna" in (orig or "").lower() else [nr]
 
 def migrate():
-    """Idempotentna naprawa bazy: kolumny, scalenie zdublowanych przepisów, zdjęcia bez czarnego tła."""
     with db() as c:
-        # Główne tabele
         c.execute("""CREATE TABLE IF NOT EXISTS przepisy(
             id INTEGER PRIMARY KEY AUTOINCREMENT, tytul TEXT, skladniki TEXT, przygotowanie TEXT, 
             kcal REAL, bialko REAL, wegle REAL, tluszcze REAL, image_url TEXT, zrodlo TEXT, 
@@ -111,44 +164,40 @@ def migrate():
             if n not in cols:
                 c.execute(f"ALTER TABLE przepisy ADD COLUMN {n} {t}")
 
-        # r[0] = id, r[1] = tytul, r[2] = sloty
         for r in c.execute("SELECT id, tytul, sloty FROM przepisy").fetchall():
-            t, nr = clean_title(r[1])
-            if t != r[1]:
-                c.execute("UPDATE przepisy SET tytul=?, sloty=? WHERE id=?", (t, add_slot(r[2], slots_of(r[1], nr)), r[0]))
+            t, nr = clean_title(r["tytul"])
+            if t != r["tytul"]:
+                c.execute("UPDATE przepisy SET tytul=?, sloty=? WHERE id=?", (t, add_slot(r["sloty"], slots_of(r["tytul"], nr)), r["id"]))
 
         keep, sl = {}, {}
         for r in c.execute("SELECT id, tytul, sloty FROM przepisy ORDER BY id").fetchall():
-            k = norm(r[1])
+            k = norm(r["tytul"])
             if k in keep:
-                u = {x for x in ((sl[k] or "") + "," + (r[2] or "")).split(",") if x}
+                u = {x for x in ((sl[k] or "") + "," + (r["sloty"] or "")).split(",") if x}
                 sl[k] = "," + ",".join(sorted(u)) + "," if u else ""
                 c.execute("UPDATE przepisy SET sloty=? WHERE id=?", (sl[k], keep[k]))
                 for tb in ("planer", "dziennik", "dzien_plan"):
                     try:
-                        c.execute(f"UPDATE {tb} SET przepis_id=? WHERE przepis_id=?", (keep[k], r[0]))
+                        c.execute(f"UPDATE {tb} SET przepis_id=? WHERE przepis_id=?", (keep[k], r["id"]))
                     except:
                         pass
-                c.execute("DELETE FROM przepisy WHERE id=?", (r[0],))
+                c.execute("DELETE FROM przepisy WHERE id=?", (r["id"],))
             else:
-                keep[k], sl[k] = r[0], r[2]
+                keep[k], sl[k] = r["id"], r["sloty"]
 
-        # r[0] = id, r[1] = image_url
         for r in c.execute("SELECT id, image_url FROM przepisy WHERE img_ok=0 AND image_url!=''").fetchall():
-            n = pack_img(r[1])
+            n = pack_img(r["image_url"])
             if n:
-                c.execute("UPDATE przepisy SET image_url=?, img_ok=1 WHERE id=?", (n, r[0]))
+                c.execute("UPDATE przepisy SET image_url=?, img_ok=1 WHERE id=?", (n, r["id"]))
 
 migrate()
 
 def sync_local_to_turso():
-    """Automatycznie przenosi dane z pliku przepisy.db do chmury Turso podczas startu na Renderze."""
     if not os.path.exists("przepisy.db") or "TURSO_DATABASE_URL" not in os.environ:
         return
     try:
         local_conn = sqlite3.connect("przepisy.db")
         with db() as turso:
-            # Jeśli w Turso są już przepisy, pomijamy
             count = turso.execute("SELECT COUNT(*) FROM przepisy").fetchone()
             if count and count[0] > 0:
                 return
@@ -161,7 +210,6 @@ def sync_local_to_turso():
                 rows = local_conn.execute(f"SELECT * FROM {table}").fetchall()
                 for row in rows:
                     turso.execute(f"INSERT OR IGNORE INTO {table} ({col_names}) VALUES ({placeholders})", row)
-            print("✅ Pomyślnie zmigrowano dane z przepisy.db do Turso!")
     except Exception as e:
         print(f"Błąd auto-migracji: {e}")
 
@@ -272,7 +320,9 @@ def recipes():
     qs = request.args.get("q", "").lower(); mx = int(request.args.get("max", 5000)); slot = int(request.args.get("slot", 0))
     with db() as c:
         rows = c.execute("SELECT id,tytul,skladniki,kcal,bialko,wegle,tluszcze,sloty FROM przepisy WHERE kcal<=? ORDER BY tytul", (mx,)).fetchall()
-        n_all, n_as = c.execute("SELECT COUNT(*), SUM(sloty!='') FROM przepisy").fetchone(); have = bool(n_all) and (n_as or 0) >= 0.8 * n_all
+        n_all = c.execute("SELECT COUNT(*) FROM przepisy").fetchone()[0]
+        n_as = c.execute("SELECT SUM(sloty!='') FROM przepisy").fetchone()[0] or 0
+        have = bool(n_all) and n_as >= 0.8 * n_all
     if slot and have: rows = [r for r in rows if f",{slot}," in (r["sloty"] or "")]
     return jsonify(assigned=have, items=[dict(id=r["id"], tytul=r["tytul"], kcal=r["kcal"], b=round(r["bialko"]), w=round(r["wegle"]), t=round(r["tluszcze"]))
                     for r in rows if qs in r["tytul"].lower() or qs in (r["skladniki"] or "").lower()])
@@ -304,7 +354,7 @@ def recipe_put(i):
     return jsonify(ok=True)
 
 def shop_add(c, items):
-    have = {r[0] for r in c.execute("SELECT tekst FROM zakupy WHERE kupione=0")}; n = 0
+    have = {r[0] for r in c.execute("SELECT tekst FROM zakupy WHERE kupione=0").fetchall()}; n = 0
     for t in items:
         t = t.strip()
         if t and t not in have: c.execute("INSERT INTO zakupy(tekst) VALUES(?)", (t,)); have.add(t); n += 1
@@ -312,7 +362,7 @@ def shop_add(c, items):
 
 @app.get("/api/shop")
 def shop_list():
-    with db() as c: return jsonify([dict(id=r["id"], tekst=r["tekst"], kupione=r["kupione"]) for r in c.execute("SELECT * FROM zakupy ORDER BY kupione, id")])
+    with db() as c: return jsonify([dict(id=r["id"], tekst=r["tekst"], kupione=r["kupione"]) for r in c.execute("SELECT * FROM zakupy ORDER BY kupione, id").fetchall()])
 
 @app.post("/api/shop")
 def shop_post():
@@ -353,17 +403,26 @@ def img(i):
 
 @app.post("/api/import-pdf")
 def import_pdf():
-    if _p.fitz is None: return jsonify(error="Zainstaluj PyMuPDF: pip install pymupdf"), 500
-    rs = extract_meals_and_images_from_pdf(request.files["pdf"])
+    if _p.fitz is None: 
+        return jsonify(error="Zainstaluj PyMuPDF: pip install pymupdf"), 500
+    
+    pdf_file = request.files.get("pdf") or request.files.get("file")
+    if not pdf_file and request.files:
+        pdf_file = list(request.files.values())[0]
+
+    if not pdf_file or pdf_file.filename == "":
+        return jsonify(error="Nie przesłano pliku PDF"), 400
+
+    rs = extract_meals_and_images_from_pdf(pdf_file)
     add = upd = 0
     with db() as c:
-        ex = {norm(r["tytul"]): r for r in c.execute("SELECT id, tytul, sloty FROM przepisy")}
+        ex = {norm(r["tytul"]): dict(id=r["id"], sloty=r["sloty"]) for r in c.execute("SELECT id, tytul, sloty FROM przepisy").fetchall()}
         for r in rs:
             img = pack_img(r["image_url"]) if r["image_url"] else None
             nrs = slots_of(r["tytul"], r["posilek_nr"]); r["tytul"] = clean_title(r["tytul"])[0]
             k = norm(r["tytul"])
             if k in ex:
-                sl = add_slot(ex[k]["sloty"], nrs); ex[k] = dict(id=ex[k]["id"], sloty=sl)
+                sl = add_slot(ex[k]["sloty"], nrs); ex[k]["sloty"] = sl
                 c.execute("UPDATE przepisy SET sloty=? WHERE id=?", (sl, ex[k]["id"]))
                 if img: c.execute("UPDATE przepisy SET image_url=?, img_ok=1 WHERE id=?", (img, ex[k]["id"]))
                 upd += 1

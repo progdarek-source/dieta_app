@@ -2,7 +2,7 @@ import re
 import gc
 
 try:
-    import fitz  # PyMuPDF
+    import pymupdf as fitz
 except ImportError:
     fitz = None
 

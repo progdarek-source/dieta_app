@@ -14,6 +14,32 @@ except ImportError:
     Image = None
 
 
+def scale_ingredients_text(text, factor=1.0, *args, **kwargs):
+    """Skaluje ilości składników w tekście o dany współczynnik."""
+    if not text:
+        return ""
+    try:
+        f = float(factor)
+        if len(args) > 0 and args[0]:
+            base = float(args[0])
+            if base > 0:
+                f = f / base
+
+        if f == 1.0 or f <= 0:
+            return text
+
+        def replace_num(match):
+            val = float(match.group(0).replace(',', '.'))
+            scaled = val * f
+            if scaled.is_integer():
+                return str(int(scaled))
+            return f"{scaled:.1f}".replace('.', ',')
+
+        return re.sub(r'\b\d+(?:[.,]\d+)?\b', replace_num, str(text))
+    except Exception:
+        return str(text)
+
+
 def compress_image_bytes(img_bytes, max_size=(350, 350), quality=45):
     """Kompresuje obraz do bardzo małych rozmiarów, oszczędzając pamięć RAM serwera."""
     if not Image:
@@ -153,7 +179,7 @@ def extract_meals_and_images_from_pdf(pdf_file):
         except Exception:
             continue
         finally:
-            gc.collect()  # Wymuszenie czyszczenia pamięci po każdej stronie
+            gc.collect()
 
     doc.close()
     gc.collect()

@@ -1,17 +1,10 @@
-import io
 import re
-import base64
 import gc
 
 try:
     import fitz  # PyMuPDF
 except ImportError:
     fitz = None
-
-try:
-    from PIL import Image
-except ImportError:
-    Image = None
 
 
 def scale_ingredients_text(text, factor=1.0, *args, **kwargs):
@@ -38,23 +31,6 @@ def scale_ingredients_text(text, factor=1.0, *args, **kwargs):
         return re.sub(r'\b\d+(?:[.,]\d+)?\b', replace_num, str(text))
     except Exception:
         return str(text)
-
-
-def compress_image_bytes(img_bytes, max_size=(350, 350), quality=45):
-    """Kompresuje obraz do bardzo małych rozmiarów, oszczędzając pamięć RAM serwera."""
-    if not Image:
-        return None
-    try:
-        with Image.open(io.BytesIO(img_bytes)) as img:
-            img.thumbnail(max_size, Image.Resampling.LANCZOS)
-            if img.mode != 'RGB':
-                img = img.convert('RGB')
-            buffer = io.BytesIO()
-            img.save(buffer, format='JPEG', quality=quality, optimize=True)
-            encoded = base64.b64encode(buffer.getvalue()).decode('utf-8')
-            return f"data:image/jpeg;base64,{encoded}"
-    except Exception:
-        return None
 
 
 def parse_meal_text(text):
@@ -140,7 +116,7 @@ def parse_meal_text(text):
 
 
 def extract_meals_and_images_from_pdf(pdf_file):
-    """Główna funkcja czytająca PDF z zabezpieczeniem pamięci RAM."""
+    """Główna funkcja czytająca PDF bez obciążania pamięci RAM."""
     if fitz is None:
         return []
 
@@ -161,19 +137,7 @@ def extract_meals_and_images_from_pdf(pdf_file):
             if not meal_data:
                 continue
 
-            # Pobranie miniaturki obrazu (jeśli istnieje)
-            image_url = None
-            try:
-                image_list = page.get_images(full=True)
-                if image_list:
-                    xref = image_list[0][0]
-                    base_image = doc.extract_image(xref)
-                    if base_image and "image" in base_image:
-                        image_url = compress_image_bytes(base_image["image"])
-            except Exception:
-                image_url = None
-
-            meal_data["image_url"] = image_url
+            meal_data["image_url"] = None
             extracted_recipes.append(meal_data)
 
         except Exception:

@@ -116,35 +116,49 @@ def parse_meal_text(text):
 
 
 def extract_meals_and_images_from_pdf(pdf_file):
-    """Główna funkcja czytająca PDF bez obciążania pamięci RAM."""
+    """Główna funkcja czytająca PDF z rejestrowaniem komunikatów diagnostycznych w logach."""
     if fitz is None:
+        print("Add detailed logging to pdf parser=== [LOG BŁĄD] PyMuPDF (fitz) nie jest zainstalowany! ===")
         return []
 
-    pdf_bytes = pdf_file.read()
+    try:
+        pdf_bytes = pdf_file.read()
+        print(f"=== [LOG] Odczytano bajty pliku PDF. Rozmiar: {len(pdf_bytes)} B ===")
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        print(f"=== [LOG] Pomyślnie otwarto PDF. Liczba stron w pliku: {len(doc)} ===")
+    except Exception as e:
+        print(f"=== [LOG BŁĄD] Nie udało się otworzyć pliku PDF: {e} ===")
+        return []
+
     extracted_recipes = []
 
     try:
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    except Exception:
-        return []
+        for page_num in range(len(doc)):
+            try:
+                page = doc[page_num]
+                text = page.get_text("text") or ""
+                print(f"=== [LOG] Strona {page_num + 1}/{len(doc)} — odczytano {len(text)} znaków ===")
 
-    for page_num in range(len(doc)):
-        try:
-            page = doc[page_num]
-            text = page.get_text("text")
+                if not text.strip():
+                    print(f"=== [LOG] Strona {page_num + 1} jest pusta (brak tekstu). ===")
+                    continue
 
-            meal_data = parse_meal_text(text)
-            if not meal_data:
+                meal_data = parse_meal_text(text)
+                if meal_data:
+                    meal_data["image_url"] = None
+                    extracted_recipes.append(meal_data)
+                    print(f"=== [LOG] Sukces: Odczytano posiłek '{meal_data.get('tytul')}' ===")
+                else:
+                    print(f"=== [LOG] Strona {page_num + 1}: Tekst nie odpowiada wzorcowi posiłku. ===")
+
+            except Exception as e:
+                print(f"=== [LOG BŁĄD] Błąd na stronie {page_num + 1}: {e} ===")
                 continue
+            finally:
+                gc.collect()
+    finally:
+        doc.close()
+        gc.collect()
 
-            meal_data["image_url"] = None
-            extracted_recipes.append(meal_data)
-
-        except Exception:
-            continue
-        finally:
-            gc.collect()
-
-    doc.close()
-    gc.collect()
+    print(f"=== [LOG ZAKOŃCZONO] Przetworzono plik. Znaleziono łącznie przepisów: {len(extracted_recipes)} ===")
     return extracted_recipes
